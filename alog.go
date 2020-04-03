@@ -42,13 +42,17 @@ func New(w io.Writer) *Alog {
 // the caller from being blocked.
 func (al Alog) Start() {
 
+  // https://stackoverflow.com/questions/19208725/example-for-sync-waitgroup-correct
+  // https://blog.golang.org/pipelines
+  var w sync.WaitGroup
   F:
 	for {
 		select {
 		case msg := <-al.msgCh:
-			go al.write(msg, nil)
-    //case <-al.shutdownCh:
-    case <-al.shutdownCh
+      w.Add(1)
+			go al.write(msg, &w)
+    case <-al.shutdownCh:
+      w.Wait()
       al.shutdown()
       break F;
 		}
@@ -72,6 +76,7 @@ func (al Alog) write(msg string, wg *sync.WaitGroup) {
 			al.errorCh <- err
 		}(err)
   }
+  //wg.Done()
 }
 
 func (al Alog) shutdown() {
@@ -95,6 +100,14 @@ func (al Alog) ErrorChannel() <-chan error {
 // Stop shuts down the logger. It will wait for all pending messages to be written and then return.
 // The logger will no longer function after this method has been called.
 func (al Alog) Stop() {
+  al.shutdownCh <- struct{}{}
+  F:
+	for {
+		select {
+    case <-al.shutdownCompleteCh:
+      break F;
+    }
+	}
 }
 
 // Write synchronously sends the message to the log output
