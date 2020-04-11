@@ -3,39 +3,39 @@
 package alog
 
 import (
-	"fmt"
-	"io"
-	"os"
-	"strings"
-	"sync"
-	"time"
+  "fmt"
+  "io"
+  "os"
+  "strings"
+  "sync"
+  "time"
 )
 
 // Alog is a type that defines a logger. It can be used to write log messages synchronously (via the Write method)
 // or asynchronously via the channel returned by the MessageChannel accessor.
 type Alog struct {
-	dest               io.Writer
-	m                  *sync.Mutex
-	msgCh              chan string
-	errorCh            chan error
-	shutdownCh         chan struct{}
-	shutdownCompleteCh chan struct{}
+  dest               io.Writer
+  m                  *sync.Mutex
+  msgCh              chan string
+  errorCh            chan error
+  shutdownCh         chan struct{}
+  shutdownCompleteCh chan struct{}
 }
 
 // New creates a new Alog object that writes to the provided io.Writer.
 // If nil is provided the output will be directed to os.Stdout.
 func New(w io.Writer) *Alog {
-	if w == nil {
-		w = os.Stdout
-	}
-	return &Alog{
-		dest: w,
-		m:                  &sync.Mutex{},
-		msgCh:              make(chan string),
-		errorCh:            make(chan error),
+  if w == nil {
+    w = os.Stdout
+  }
+  return &Alog{
+    dest: w,
+    m:                  &sync.Mutex{},
+    msgCh:              make(chan string),
+    errorCh:            make(chan error),
     shutdownCh:         make(chan struct{}),
     shutdownCompleteCh: make(chan struct{}),
-	}
+  }
 }
 
 // Start begins the message loop for the asynchronous logger. It should be initiated as a goroutine to prevent
@@ -46,35 +46,35 @@ func (al Alog) Start() {
   // https://blog.golang.org/pipelines
   var w sync.WaitGroup
   F:
-	for {
-		select {
-		case msg := <-al.msgCh:
+  for {
+    select {
+    case msg := <-al.msgCh:
       w.Add(1)
-			go al.write(msg, &w)
+      go al.write(msg, &w)
     case <-al.shutdownCh:
       w.Wait()
       al.shutdown()
       break F;
-		}
-	}
+    }
+  }
 
 }
 
 func (al Alog) formatMessage(msg string) string {
-	if !strings.HasSuffix(msg, "\n") {
-		msg += "\n"
-	}
-	return fmt.Sprintf("[%v] - %v", time.Now().Format("2006-01-02 15:04:05"), msg)
+  if !strings.HasSuffix(msg, "\n") {
+    msg += "\n"
+  }
+  return fmt.Sprintf("[%v] - %v", time.Now().Format("2006-01-02 15:04:05"), msg)
 }
 
 func (al Alog) write(msg string, wg *sync.WaitGroup) {
-	al.m.Lock()
-	defer al.m.Unlock()
+  al.m.Lock()
+  defer al.m.Unlock()
   _, err := al.dest.Write([]byte(al.formatMessage(msg)))
   if err != nil {
-		go func(err error) {
-			al.errorCh <- err
-		}(err)
+    go func(err error) {
+      al.errorCh <- err
+    }(err)
   }
   wg.Done()
 }
@@ -87,14 +87,14 @@ func (al Alog) shutdown() {
 
 // MessageChannel returns a channel that accepts messages that should be written to the log.
 func (al Alog) MessageChannel() chan<- string {
-	return al.msgCh
+  return al.msgCh
 }
 
 // ErrorChannel returns a channel that will be populated when an error is raised during a write operation.
 // This channel should always be monitored in some way to prevent deadlock goroutines from being generated
 // when errors occur.
 func (al Alog) ErrorChannel() <-chan error {
-	return al.errorCh
+  return al.errorCh
 }
 
 // Stop shuts down the logger. It will wait for all pending messages to be written and then return.
@@ -102,15 +102,15 @@ func (al Alog) ErrorChannel() <-chan error {
 func (al Alog) Stop() {
   al.shutdownCh <- struct{}{}
   F:
-	for {
-		select {
+  for {
+    select {
     case <-al.shutdownCompleteCh:
       break F;
     }
-	}
+  }
 }
 
 // Write synchronously sends the message to the log output
 func (al Alog) Write(msg string) (int, error) {
-	return al.dest.Write([]byte(al.formatMessage(msg)))
+  return al.dest.Write([]byte(al.formatMessage(msg)))
 }
